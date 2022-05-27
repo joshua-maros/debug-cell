@@ -153,7 +153,9 @@ impl<T: ?Sized> RefCell<T> {
 impl BorrowFlag {
     #[inline]
     fn new() -> BorrowFlag {
-        BorrowFlag { flag: Cell::new(UNUSED) }
+        BorrowFlag {
+            flag: Cell::new(UNUSED),
+        }
     }
 
     #[inline]
@@ -200,13 +202,12 @@ impl<T: Clone> Clone for RefCell<T> {
     }
 }
 
-impl<T:Default> Default for RefCell<T> {
+impl<T: Default> Default for RefCell<T> {
     #[inline]
     fn default() -> RefCell<T> {
         RefCell::new(Default::default())
     }
 }
-
 
 impl<T: ?Sized + PartialEq> PartialEq for RefCell<T> {
     #[inline]
@@ -226,7 +227,9 @@ impl<'b> BorrowRef<'b> {
     #[cfg_attr(not(debug_assertions), inline)]
     fn new(borrow: &'b BorrowFlag) -> Option<BorrowRef<'b>> {
         let flag = borrow.flag.get();
-        if flag == WRITING { return None }
+        if flag == WRITING {
+            return None;
+        }
         borrow.flag.set(flag + 1);
         borrow.push(get_caller());
         Some(BorrowRef { borrow: borrow })
@@ -255,7 +258,6 @@ pub struct Ref<'b, T: ?Sized + 'b> {
     _borrow: BorrowRef<'b>,
 }
 
-
 impl<'b, T: ?Sized> Deref for Ref<'b, T> {
     type Target = T;
     fn deref(&self) -> &T {
@@ -271,7 +273,9 @@ impl<'b> BorrowRefMut<'b> {
     #[cfg_attr(debug_assertions, inline(never))]
     #[cfg_attr(not(debug_assertions), inline)]
     fn new(borrow: &'b BorrowFlag) -> Option<BorrowRefMut<'b>> {
-        if borrow.flag.get() != UNUSED { return None }
+        if borrow.flag.get() != UNUSED {
+            return None;
+        }
         borrow.flag.set(WRITING);
         borrow.push(get_caller());
         Some(BorrowRefMut { borrow: borrow })
@@ -295,7 +299,6 @@ pub struct RefMut<'b, T: ?Sized + 'b> {
     _borrow: BorrowRefMut<'b>,
 }
 
-
 impl<'b, T: ?Sized> Deref for RefMut<'b, T> {
     type Target = T;
     fn deref(&self) -> &T {
@@ -307,6 +310,20 @@ impl<'b, T: ?Sized> DerefMut for RefMut<'b, T> {
     fn deref_mut(&mut self) -> &mut T {
         self._value
     }
+}
+
+#[cfg(feature = "stable_deref")]
+extern crate stable_deref_trait;
+#[cfg(feature = "stable_deref")]
+mod stable_deref_impl {
+
+    use stable_deref_trait::StableDeref;
+
+    use crate::{Ref, RefMut};
+
+    unsafe impl<'b, T: ?Sized> StableDeref for Ref<'b, T> {}
+    unsafe impl<'b, T: ?Sized> StableDeref for RefMut<'b, T> {}
+    // RefMut does not implement Clone.
 }
 
 #[cfg(test)]
