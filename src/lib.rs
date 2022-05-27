@@ -85,7 +85,7 @@ impl<T> RefCell<T> {
     /// Consumes the `RefCell`, returning the wrapped value.
     pub fn into_inner(self) -> T {
         debug_assert!(self.borrow.flag.get() == UNUSED);
-        unsafe { self.value.into_inner() }
+        self.value.into_inner()
     }
 }
 
@@ -109,6 +109,25 @@ impl<T: ?Sized> RefCell<T> {
         }
     }
 
+    /// Immutably borrows the wrapped value.
+    ///
+    /// The borrow lasts until the returned `Ref` exits scope. Multiple
+    /// immutable borrows can be taken out at the same time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is currently mutably borrowed.
+    #[cfg_attr(debug_assertions, inline(never))]
+    pub fn try_borrow<'a>(&'a self) -> Result<Ref<'a, T>, String> {
+        match BorrowRef::new(&self.borrow) {
+            Some(b) => Ok(Ref {
+                _value: unsafe { &*self.value.get() },
+                _borrow: b,
+            }),
+            None => Err(self.panic_msg("mutably borrowed")),
+        }
+    }
+
     /// Mutably borrows the wrapped value.
     ///
     /// The borrow lasts until the returned `RefMut` exits scope. The value
@@ -128,14 +147,33 @@ impl<T: ?Sized> RefCell<T> {
         }
     }
 
+    /// Mutably borrows the wrapped value.
+    ///
+    /// The borrow lasts until the returned `RefMut` exits scope. The value
+    /// cannot be borrowed while this borrow is active.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is currently borrowed.
+    #[cfg_attr(debug_assertions, inline(never))]
+    pub fn try_borrow_mut<'a>(&'a self) -> Result<RefMut<'a, T>, String> {
+        match BorrowRefMut::new(&self.borrow) {
+            Some(b) => Ok(RefMut {
+                _value: unsafe { &mut *self.value.get() },
+                _borrow: b,
+            }),
+            None => Err(self.panic_msg("borrowed")),
+        }
+    }
+
     #[cfg(not(debug_assertions))]
-    fn panic(&self, msg: &str) -> ! {
-        panic!("RefCell<T> already {}", msg)
+    fn panic_msg(&self, msg: &str) -> String {
+        format!("RefCell<T> already {}", msg)
     }
 
     #[cfg(debug_assertions)]
     #[allow(unused_must_use)]
-    fn panic(&self, msg: &str) -> ! {
+    fn panic_msg(&self, msg: &str) -> String {
         let mut msg = format!("RefCell<T> already {}", msg);
         let locations = self.borrow.locations.borrow();
         if locations.len() > 0 {
@@ -145,7 +183,11 @@ impl<T: ?Sized> RefCell<T> {
             }
             msg.push_str("\n\n");
         }
-        panic!(msg)
+        msg
+    }
+
+    fn panic(&self, msg: &str) -> ! {
+        panic!("{}", self.panic_msg(msg))
     }
 }
 
