@@ -166,6 +166,11 @@ impl<T: ?Sized> RefCell<T> {
         }
     }
 
+    /// Returns a pointer to the internal contents of this RefCell
+    pub fn as_ptr(&self) -> *const T {
+        unsafe { &*self.value.get() as *const T }
+    }
+
     #[cfg(not(debug_assertions))]
     fn panic_msg(&self, msg: &str) -> String {
         format!("RefCell<T> already {}", msg)
